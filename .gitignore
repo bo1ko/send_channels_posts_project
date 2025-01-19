@@ -1,1 +1,6 @@
 logs/*
+.env
+__pycache__
+.vscode
+sessions/*
+db.sqlite3
