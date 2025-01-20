@@ -46,6 +46,7 @@ class TelegramChannel(models.Model):
     telegram_account = models.ForeignKey(
         TelegramAccount, on_delete=models.SET_NULL, null=True, blank=True
     )
+    channel_id = models.CharField(max_length=128, null=True, blank=True)
 
     def __str__(self):
         return self.title if self.title else self.url

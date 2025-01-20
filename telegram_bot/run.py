@@ -20,7 +20,7 @@ from telegram_bot.admin_app.common import private as admin_private
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-    handlers=[logging.FileHandler("/logs/bot.log"), logging.StreamHandler()],
+    handlers=[logging.FileHandler("logs/bot.log"), logging.StreamHandler()],
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,6 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Bot is stopped manually")
-    except Exception as e:
+    except Exception:
         logger.error("Bot stops with an error")
         logger.info(f"{traceback.format_exc()}")
