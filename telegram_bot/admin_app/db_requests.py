@@ -2,9 +2,9 @@ import logging
 import os
 import traceback
 
-from custom_admin.models import TelegramUser, CustomUser, TelegramAccount
+from custom_admin.models import TelegramChannel, TelegramUser, CustomUser, TelegramAccount
 from asgiref.sync import sync_to_async
-
+from django.db.models import Count
 
 logger = logging.getLogger(__name__)
 
@@ -53,3 +53,36 @@ def delete_telegram_account(pk: int):
         os.remove(session_file_path)
 
     return TelegramAccount.objects.get(pk=pk).delete()
+
+@sync_to_async
+def get_telegram_channels():
+    channels = TelegramChannel.objects.all()
+    channels_dict = {}
+
+    for channel in channels:
+        channels_dict[channel.pk] = [channel.title, channel.url]
+
+    return channels_dict
+
+@sync_to_async
+def get_or_create_telegram_channel(title: str, url: str, telegram: TelegramAccount):
+    return TelegramChannel.objects.get_or_create(url=url, defaults={"title": title, "telegram_account": telegram})
+
+@sync_to_async
+def delete_telegram_channel(pk: int):
+    return TelegramChannel.objects.get(pk=pk).delete()
+
+@sync_to_async
+def get_min_telegram_channel():
+    accounts_with_channel_count = TelegramAccount.objects.annotate(
+        channel_count=Count('telegramchannel')
+    )
+
+    min = 0
+    min_account = None
+    for account in accounts_with_channel_count:
+        if account.channel_count >= min:
+            min = account.channel_count
+            min_account = account
+
+    return min_account
