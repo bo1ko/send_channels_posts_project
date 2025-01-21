@@ -42,7 +42,7 @@ async def user_bot_new_messages():
 
                     for result in results:
                         if result:
-                            send_email(
+                            email_result = send_email(
                                 result["chat"],
                                 result["message"],
                                 to_email,
@@ -54,14 +54,18 @@ async def user_bot_new_messages():
                                 result.get("image_path"),
                             )
 
+                            if email_result:
+                                return True
+
         else:
             logger.error("No Telegram accounts found")
-            return
+            return False
 
-    except Exception:
+    except Exception as e:
         logger.error("user_bot_new_messages error")
         logger.error(f"{traceback.format_exc()}")
+        return False
 
 
 def start_cron():
-    asyncio.run(user_bot_new_messages())
+    return asyncio.run(user_bot_new_messages())

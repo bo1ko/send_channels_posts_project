@@ -16,6 +16,7 @@ from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.tl.types import MessageMediaPhoto
 from telethon.sync import functions
 from telegram_bot.admin_app.db_requests import set_unactive_account
+import markdown
 
 logger = logging.getLogger(__name__)
 
@@ -160,21 +161,21 @@ class UserBot:
         channels: dict = [],
     ):
         """
-        Отримує нові непрочитані повідомлення з фото з усіх чатів, до яких підключено userbot.
+        Get new posts from all channels
         """
         try:
             client = TelegramClient(f"sessions/{phone_number}", api_id, api_hash)
             await client.connect()
 
-            # Перевіряємо авторизацію
+            # check if client is authorized
             if not await client.is_user_authorized():
                 logger.error(
-                    "Клієнт не авторизований. Будь ласка, авторизуйтесь спочатку."
+                    "Client is not authorized. Please authorize first."
                 )
                 await client.disconnect()
                 return False
             
-            # Отримуємо всі діалоги (чати, групи, канали)
+            # get all dialogs
             dialogs = await client.get_dialogs()
             posts_with_images = []
             chats_with_unread = []
@@ -184,56 +185,57 @@ class UserBot:
                     channel_id = getattr(dialog.message.peer_id, 'channel_id', None)
                     if channel_id is not None:
                         if channels.get(channel)[2] == str(channel_id):
-                            # Фільтруємо тільки ті діалоги, де є непрочитані повідомлення
+                            # check if there are unread messages
                             if dialog.unread_count > 0:
                                 chats_with_unread.append(dialog)
 
             if not chats_with_unread:
-                logger.info("Немає чатів із непрочитаними повідомленнями.")
+                logger.info("Don't have new posts")
                 await client.disconnect()
                 return []
 
-            # Створюємо папку для збереження фото, якщо вона не існує
+            # create the "images" directory if it doesn't exist
             os.makedirs("images", exist_ok=True)
 
-            # Проходимось по кожному чату з непрочитаними повідомленнями
+            # loop through all unread chats
             for chat in chats_with_unread:
                 chat_name = chat.name or "Без назви"
-                logger.info(f"Перевіряємо нові повідомлення у чаті: {chat_name}")
+                dt = chat.date
+                logger.info(f"Checking chat: {chat_name}")
 
-                # Отримуємо останні 'limit' повідомлень
+                # get the last message
                 messages = await client.get_messages(chat.entity, limit=limit)
 
-                # Фільтруємо тільки непрочитані повідомлення
-                post = {"chat": chat_name, "message": messages[0].text}
+                # filter out non-text messages
+                post = {"chat": f"{chat_name} {dt.strftime("%H:%M:%S %d-%m-%y")}", "message": markdown.markdown(messages[0].text)}
 
-                # Якщо повідомлення містить фото
+                # if the message has a photo
                 if isinstance(messages[0].media, MessageMediaPhoto):
-                    # Завантажуємо фото за його ID
+                    # download the photo
                     file_path = await client.download_media(
                         messages[0].media, file="images/"
                     )
-                    post["image_path"] = file_path  # Зберігаємо шлях до завантаженого фото
+                    post["image_path"] = file_path  # save the path to the image
 
                 posts_with_images.append(post)
 
                 await client.send_read_acknowledge(
-                    chat.entity,  # Чат, де повідомлення знаходяться
-                    message=messages,  # Список повідомлень або одне повідомлення
-                    clear_mentions=False,  # Не очищуємо відмітки
-                    clear_reactions=False  # Не очищуємо реакції
+                    chat.entity,
+                    message=messages,
+                    clear_mentions=False,
+                    clear_reactions=False
                 )
 
-            # Від'єднуємо клієнт після виконання
+            # disconnect the client
             await client.disconnect()
 
             if not posts_with_images:
-                logger.info("Нові повідомлення з фото не знайдені.")
+                logger.info("New posts not found.")
                 return []
 
             return posts_with_images
         except (UserDeactivatedError, UserIsBlockedError) as e:
-            logger.error(f"Помилка: акаунт {phone_number} був заблокований або деактивований.")
+            logger.error(f"Error: account {phone_number} is deactivated.")
             logger.error(str(e))
             await set_unactive_account(phone_number)
             if client and client.is_connected():
@@ -241,7 +243,7 @@ class UserBot:
             return False
         
         except Exception:
-            logger.error("Помилка під час отримання нових повідомлень з фото.")
+            logger.error("Error while getting new posts.")
             logger.error(f"{traceback.format_exc()}")
             if client and client.is_connected():
                 await client.disconnect()

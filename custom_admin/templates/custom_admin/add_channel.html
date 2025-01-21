@@ -9,57 +9,43 @@
 <body>
     <div class="container mt-4">
         <h1>Додати канал</h1>
-        <form id="addChannelForm">
+        
+        <!-- Messages Section -->
+        {% if messages %}
+            <div>
+                {% for message in messages %}
+                    {% if message.tags == 'error' %}
+                        <div class="alert alert-danger" role="alert">
+                            {{ message }}
+                        </div>
+                    {% elif message.tags == 'success' %}
+                        <div class="alert alert-info" role="alert">
+                            {{ message }}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info" role="alert">
+                            {{ message }}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% endif %}
+    
+        <form id="addChannelForm" method="post" action="{% url 'custom_admin:add_channel' %}">
+            {% csrf_token %}
             <div class="mb-3">
                 <label for="channelName" class="form-label">Назва каналу</label>
-                <input type="text" class="form-control" id="channelName" required>
+                <input type="text" class="form-control" id="channelName" name="name" required>
             </div>
             <div class="mb-3">
                 <label for="channelUrl" class="form-label">URL каналу</label>
-                <input type="url" class="form-control" id="channelUrl" required>
+                <input type="url" class="form-control" id="channelUrl" name="url" required>
             </div>
             <button type="submit" class="btn btn-primary">Зберегти</button>
             <a href="{% url 'custom_admin:index' %}" class="btn btn-secondary">Скасувати</a>
         </form>
     </div>
-
-    <script>
-        const addChannelForm = document.getElementById('addChannelForm');
-
-        addChannelForm.addEventListener('submit', (event) => {
-            event.preventDefault();
-
-            const channelName = document.getElementById('channelName').value;
-            const channelUrl = document.getElementById('channelUrl').value;
-
-            const channelData = {
-                name: channelName,
-                url: channelUrl
-            };
-
-            fetch('/your-api-endpoint', { // Замініть на ваш API endpoint
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(channelData)
-            })
-            .then(response => {
-                if (!response.ok) {
-                  return response.json().then(err => {throw new Error(err.message || "Помилка сервера")});
-                }
-                return response.json()
-            })
-            .then(data => {
-                // Перенаправляємо на головну сторінку з повідомленням про успіх
-                const successMessage = encodeURIComponent('Канал успішно додано!');
-                window.location.href = `index.html?success=${successMessage}`;
-            })
-            .catch(error => {
-                alert("Помилка додавання каналу: " + error.message);
-            });
-        });
-    </script>
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
