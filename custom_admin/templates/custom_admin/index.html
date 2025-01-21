@@ -9,84 +9,73 @@
 <body>
     <div class="container mt-4">
         <h1>Керування каналами</h1>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addChannelModal">
-            Додати канал
-        </button>
+        <a href="{% url 'custom_admin:add_channel' %}" class="btn btn-primary">Додати канал</a>
 
+        <div id="alert-container"></div>
         <table class="table mt-4" id="channels-table">
             <thead>
                 <tr>
                     <th>Назва каналу</th>
-                    <th>Кількість підписників</th>
-                    <th>Дії</th>
+                    <th>URL каналу</th>
                 </tr>
             </thead>
             <tbody>
-                </tbody>
+                {% for channel in channels %}
+                <tr>
+                    <td>{{ channel.title }}</td>
+                    <td>{{ channel.telegram_account }}</td>
+                    <td><a href="{{ channel.url }}" target="_blank">{{ channel.url }}</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
         </table>
     </div>
 
-    <div class="modal fade" id="addChannelModal" tabindex="-1" aria-labelledby="addChannelModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="addChannelModalLabel">Додати канал</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="addChannelForm">
-                        <div class="mb-3">
-                            <label for="channelName" class="form-label">Назва каналу</label>
-                            <input type="text" class="form-control" id="channelName" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="subscribersCount" class="form-label">Кількість підписників</label>
-                            <input type="number" class="form-control" id="subscribersCount" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Зберегти</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
-        const addChannelForm = document.getElementById('addChannelForm');
-        const channelsTableBody = document.getElementById('channels-table').querySelector('tbody');
+        // Отримуємо повідомлення про успіх з URL (якщо є)
+        const urlParams = new URLSearchParams(window.location.search);
+        const successMessage = urlParams.get('success');
 
-        addChannelForm.addEventListener('submit', (event) => {
-            event.preventDefault();
+        if (successMessage) {
+            const alertContainer = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show';
+            alert.innerHTML = decodeURIComponent(successMessage) + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+            alertContainer.appendChild(alert);
+            // Очищаємо параметри URL щоб повідомлення не відображалось при оновленні сторінки
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
 
-            const channelName = document.getElementById('channelName').value;
-            const subscribersCount = document.getElementById('subscribersCount').value;
+       // Функція для отримання списку каналів (замість пустої таблиці)
+        function fetchChannels() {
+          fetch('/api/channels') // Замініть на ваш API endpoint
+            .then(response => response.json())
+            .then(channels => {
+              const channelsTableBody = document.getElementById('channels-table').querySelector('tbody');
+              channelsTableBody.innerHTML = ''; // Очищаємо таблицю перед заповненням
 
-            const newRow = channelsTableBody.insertRow();
-            const nameCell = newRow.insertCell();
-            const countCell = newRow.insertCell();
-            const actionsCell = newRow.insertCell();
+              channels.forEach(channel => {
+                const newRow = channelsTableBody.insertRow();
+                const nameCell = newRow.insertCell();
+                const urlCell = newRow.insertCell();
+                const actionsCell = newRow.insertCell();
 
-            nameCell.textContent = channelName;
-            countCell.textContent = subscribersCount;
-            actionsCell.innerHTML = '<button class="btn btn-danger btn-sm delete-channel">Видалити</button>'; // Додаємо кнопку видалення
-
-            // Очищаємо форму
-            document.getElementById('channelName').value = '';
-            document.getElementById('subscribersCount').value = '';
-
-            // Закриваємо модальне вікно
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addChannelModal'));
-            modal.hide();
-
-            // Додаємо обробник подій для кнопки видалення
-            const deleteButtons = document.querySelectorAll('.delete-channel');
-            deleteButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                   button.closest('tr').remove();
+                nameCell.textContent = channel.name;
+                urlCell.innerHTML = `<a href="${channel.url}" target="_blank">${channel.url}</a>`;
+                actionsCell.innerHTML = '<button class="btn btn-danger btn-sm delete-channel">Видалити</button>';
+              });
+               const deleteButtons = document.querySelectorAll('.delete-channel');
+                deleteButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                       button.closest('tr').remove();
+                    });
                 });
             });
-
-        });
+        }
+        // Викликаємо функцію для отримання списку каналів при завантаженні сторінки
+        fetchChannels();
     </script>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
