@@ -22,15 +22,9 @@ router = Router()
 router.message.middleware(CheckAndAddUserMiddleware())
 router.message.filter(IsAdmin())
 
-admin_panel_btns = get_callback_btns(
-    btns={
-        "Редагувати аккаунти 📝": "edit_accounts",
-        "Редагувати канали 📺": "edit_channels",
-        "Редагувати час роботи 🕒": "change_time",
-        "Статус бота 🤖": "bot_status",
-    },
-    sizes=(1, 1),
-)
+scheduler = BackgroundScheduler()
+parsing_job = None
+parsing_status = False
 
 edit_accounts_btns = get_callback_btns(
     btns={
@@ -80,10 +74,6 @@ bot_status_active_btns = get_callback_btns(
     sizes=(1,),
 )
 
-scheduler = BackgroundScheduler()
-parsing_job = None
-parsing_status = False
-
 
 class AddAccount(StatesGroup):
     phone_number: str = State()
@@ -96,6 +86,7 @@ class AddChannel(StatesGroup):
     title: str = State()
     url: str = State()
 
+
 class ChangeTime(StatesGroup):
     wait_time: int = State()
 
@@ -103,18 +94,42 @@ class ChangeTime(StatesGroup):
 @router.message(Command("admin"))
 async def cmd_admin(message: Message, state: FSMContext):
     await state.clear()
+    admin_panel_btns = get_callback_btns(
+        btns={
+            "Редагувати аккаунти 📝": "edit_accounts",
+            "Редагувати канали 📺": "edit_channels",
+            "Редагувати час роботи 🕒": "change_time",
+            f"Статус бота: {'Активний ✔' if parsing_status else 'Неактивний ❌'}": f"bot_{'stop' if parsing_status else 'start'}",
+        },
+        sizes=(1, 1),
+    )
+
     await message.answer("Адмін панель 👑", reply_markup=admin_panel_btns)
 
 
 @router.callback_query(F.data == "admin")
 async def callback_admin(callback: CallbackQuery, state: FSMContext):
     await state.clear()
+    admin_panel_btns = get_callback_btns(
+        btns={
+            "Редагувати аккаунти 📝": "edit_accounts",
+            "Редагувати канали 📺": "edit_channels",
+            "Редагувати час роботи 🕒": "change_time",
+            f"Статус бота: {'Активний ✔' if parsing_status else 'Неактивний ❌'}": f"bot_{'stop' if parsing_status else 'start'}",
+        },
+        sizes=(1, 1),
+    )
+
     await callback.message.edit_text("Адмін панель 👑", reply_markup=admin_panel_btns)
 
 
 @router.callback_query(F.data == "edit_accounts")
 async def callback_edit_accounts(callback: CallbackQuery, state: FSMContext):
     await state.clear()
+    if parsing_status:
+        await callback.answer("Зупиніть парсинг!")
+        return
+
     await callback.message.edit_text(
         "Редагування аккаунтів 📝", reply_markup=edit_accounts_btns
     )
@@ -230,7 +245,7 @@ async def callback_delete_accounts(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("delete_account_"))
 async def callback_delete_account(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    account_pk = callback.data.split("_")[1]
+    account_pk = callback.data.split("_")[-1]
     is_deleted = await rq.delete_telegram_account(int(account_pk))
     accounts = await rq.get_telegram_accounts()
     btns = {}
@@ -244,13 +259,11 @@ async def callback_delete_account(callback: CallbackQuery, state: FSMContext):
     )
 
     if is_deleted:
-        await callback.answer("Аккаунт видалено")
+        await callback.answer("Аккаунт видалено", reply_markup=delete_accounts_btns)
     else:
-        await callback.answer("Помилка при видаленні аккаунту")
-
-    await callback.message.edit_text(
-        "Видалення аккаунтів 📝", reply_markup=delete_accounts_btns
-    )
+        await callback.answer(
+            "Помилка при видаленні аккаунту", reply_markup=delete_accounts_btns
+        )
 
 
 @router.callback_query(F.data == "accounts_status")
@@ -268,6 +281,11 @@ async def callback_accounts_status(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "edit_channels")
 async def callback_edit_channels(callback: CallbackQuery, state: FSMContext):
     await state.clear()
+
+    if parsing_status:
+        await callback.answer("Зупиніть парсинг!")
+        return
+    
     await callback.message.edit_text(
         "Редагування каналів 📝", reply_markup=edit_channels_btns
     )
@@ -328,7 +346,6 @@ async def add_channel_third_step(message: Message, state: FSMContext):
         )
         return
 
-
     user_bot = UserBot()
     result = await user_bot.join_channel(
         url, account.phone_number, account.api_id, account.api_hash
@@ -340,7 +357,9 @@ async def add_channel_third_step(message: Message, state: FSMContext):
         )
         return
     elif result[1] == "free":
-        channel, created = await rq.get_or_create_telegram_channel(title, url, account, channel_id=result[2])
+        channel, created = await rq.get_or_create_telegram_channel(
+            title, url, account, channel_id=result[2]
+        )
 
         if not created:
             await message.answer("Канал вже існує", reply_markup=edit_channels_btns)
@@ -391,6 +410,8 @@ async def callback_delete_channel(callback: CallbackQuery, state: FSMContext):
     for key, value in channels.items():
         btns[f"{value[0]}"] = f"delete_channel_{key}"
 
+    btns["Назад"] = "edit_channels"
+
     delete_channels_btns = get_callback_btns(
         btns=btns,
         sizes=(1, 1),
@@ -413,21 +434,8 @@ async def callback_delete_channel(callback: CallbackQuery, state: FSMContext):
         )
 
 
-@router.callback_query(F.data == "bot_status")
-async def callback_bot_status(callback: CallbackQuery, state: FSMContext):
-    await state.clear()
-    if parsing_status:
-        await callback.message.edit_text(
-            "Статус бота: Активний", reply_markup=bot_status_active_btns
-        )
-    else:
-        await callback.message.edit_text(
-            "Статус бота: Неактивний", reply_markup=bot_status_inactive_btns
-        )
-
-
 @router.callback_query(F.data == "bot_start")
-async def callback_bot_start(callback: CallbackQuery):
+async def callback_bot_start(callback: CallbackQuery, state: FSMContext):
     global parsing_status, parsing_job
 
     if not parsing_status:
@@ -439,7 +447,7 @@ async def callback_bot_start(callback: CallbackQuery):
                 reply_markup=back_edit_channel_btn,
             )
             return
-        
+
         wait_time = int(open("time.txt", "r").read())
 
         parsing_job = scheduler.add_job(
@@ -449,28 +457,26 @@ async def callback_bot_start(callback: CallbackQuery):
         )
         scheduler.start()
         parsing_status = True
-        await callback.message.edit_text(
-            "Статус бота: Активний", reply_markup=bot_status_active_btns
-        )
         await callback.answer("Запускаю парсинг")
+        await callback_admin(callback, state)
     else:
         await callback.answer("Парсинг вже активний!")
 
 
 @router.callback_query(F.data == "bot_stop")
-async def callback_bot_stop(callback: CallbackQuery):
+async def callback_bot_stop(callback: CallbackQuery, state: FSMContext):
     global parsing_status, parsing_job
 
     if parsing_status:
         if parsing_job:
             parsing_job.remove()
         parsing_status = False
-        await callback.message.edit_text(
-            "Статус бота: Неактивний", reply_markup=bot_status_inactive_btns
-        )
+
         await callback.answer("Зупиняю парсинг")
+        await callback_admin(callback, state)
     else:
         await callback.answer("Парсинг вже зупинено!")
+
 
 @router.callback_query(F.data == "change_time")
 async def callback_change_time_first(callback: CallbackQuery, state: FSMContext):
@@ -478,14 +484,17 @@ async def callback_change_time_first(callback: CallbackQuery, state: FSMContext)
 
     current_time = open("time.txt", "r").read()
     await callback.message.edit_text(
-        f"Введіть час запуску парсингу, теперішній час: {current_time}", reply_markup=get_callback_btns(btns={"Назад": "admin"})
+        f"Введіть час запуску парсингу, теперішній час: {current_time}",
+        reply_markup=get_callback_btns(btns={"Назад": "admin"}),
     )
     await state.set_state(ChangeTime.wait_time)
+
 
 async def change_time_first(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "Введіть час запуску парсингу", reply_markup=get_callback_btns(btns={"Назад": "admin"})
+        "Введіть час запуску парсингу",
+        reply_markup=get_callback_btns(btns={"Назад": "admin"}),
     )
     await state.set_state(ChangeTime.wait_time)
 
@@ -501,4 +510,6 @@ async def change_time_second(message: Message, state: FSMContext):
         return
 
     await state.clear()
-    await message.answer("Час змінено", reply_markup=get_callback_btns(btns={"Назад": "admin"}))
+    await message.answer(
+        "Час змінено", reply_markup=get_callback_btns(btns={"Назад": "admin"})
+    )

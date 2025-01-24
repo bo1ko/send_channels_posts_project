@@ -44,7 +44,7 @@ class TelegramChannel(models.Model):
     title = models.CharField(max_length=128, null=True, blank=True)
     url = models.URLField(null=False, blank=False)
     telegram_account = models.ForeignKey(
-        TelegramAccount, on_delete=models.SET_NULL, null=True, blank=True
+        TelegramAccount, on_delete=models.CASCADE, null=True, blank=True
     )
     channel_id = models.CharField(max_length=128, null=True, blank=True)
 

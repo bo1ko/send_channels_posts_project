@@ -14,7 +14,6 @@ from telethon.errors.rpcerrorlist import (
 from telethon.errors import UserDeactivatedError
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.tl.types import MessageMediaPhoto
-from telethon.sync import functions
 from telegram_bot.admin_app.db_requests import set_unactive_account
 import markdown
 
@@ -157,7 +156,6 @@ class UserBot:
         phone_number: str,
         api_id: int,
         api_hash: int,
-        limit: int = 1,
         channels: dict = [],
     ):
         """
@@ -187,7 +185,7 @@ class UserBot:
                         if channels.get(channel)[2] == str(channel_id):
                             # check if there are unread messages
                             if dialog.unread_count > 0:
-                                chats_with_unread.append(dialog)
+                                chats_with_unread.append([dialog, dialog.unread_count])
 
             if not chats_with_unread:
                 logger.info("Don't have new posts")
@@ -199,24 +197,34 @@ class UserBot:
 
             # loop through all unread chats
             for chat in chats_with_unread:
+                chat, unread_count = chat
                 chat_name = chat.name or "Без назви"
                 dt = chat.date
                 logger.info(f"Checking chat: {chat_name}")
 
                 # get the last message
-                messages = await client.get_messages(chat.entity, limit=limit)
+                messages = await client.get_messages(chat.entity, limit=unread_count)
+                
+                message = ""
+                post_list = []
+                if messages:
+                    for i in range(unread_count):
+                        # if the message has a photo
+                        if isinstance(messages[i].media, MessageMediaPhoto):
+                            # download the photo
+                            file_path = await client.download_media(
+                                messages[i].media, file="images/"
+                            )
+                            post_list.append(file_path)
+
+                        if messages[i].text != "":
+                            message = messages[i].text
+                            break
 
                 # filter out non-text messages
-                post = {"chat": f"{chat_name} {dt.strftime("%H:%M:%S %d-%m-%y")}", "message": markdown.markdown(messages[0].text)}
-
-                # if the message has a photo
-                if isinstance(messages[0].media, MessageMediaPhoto):
-                    # download the photo
-                    file_path = await client.download_media(
-                        messages[0].media, file="images/"
-                    )
-                    post["image_path"] = file_path  # save the path to the image
-
+                post = {"chat": f"{chat_name} {dt.strftime("%H:%M:%S %d-%m-%y")}", "message": markdown.markdown(message)}
+                post["image_path"] = post_list  # save the path to the image
+                
                 posts_with_images.append(post)
 
                 await client.send_read_acknowledge(

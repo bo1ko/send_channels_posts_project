@@ -8,7 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def send_email(subject: str, body: str, to_email: str, from_email: str, smtp_server: str, smtp_port: int, smtp_user: str, smtp_password: str, image_path: str = None):
+def send_email(subject: str, body: str, to_email: str, from_email: str, smtp_server: str, smtp_port: int, smtp_user: str, smtp_password: str, image_path_list: list = None):
     """
     Sends an email with the specified text and, if needed, an image as an attachment.
 
@@ -34,16 +34,17 @@ def send_email(subject: str, body: str, to_email: str, from_email: str, smtp_ser
         msg.attach(MIMEText(body, 'html'))
      
         # If an image path is provided, add it as an attachment
-        if image_path and os.path.isfile(image_path):
-            with open(image_path, 'rb') as attachment:
-                part = MIMEBase('application', 'octet-stream')
-                part.set_payload(attachment.read())
-                encoders.encode_base64(part)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename= {os.path.basename(image_path)}',
-                )
-                msg.attach(part)
+        for image_path in image_path_list:
+            if image_path and os.path.isfile(image_path):
+                with open(image_path, 'rb') as attachment:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(attachment.read())
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        'Content-Disposition',
+                        f'attachment; filename= {os.path.basename(image_path)}',
+                    )
+                    msg.attach(part)
 
         # Connect to the SMTP server
         with smtplib.SMTP(smtp_server, smtp_port) as server:
